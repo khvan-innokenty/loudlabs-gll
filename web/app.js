@@ -105,13 +105,42 @@ const geometry = createGeometryController({
 });
 
 // Initialize WASM
-async function initWasm() {
+async function initWasm(onDownloadProgress) {
   const go = new Go();
-  const response = await fetch("gll.wasm");
+  let response = await fetch("gll.wasm");
   if (!response.ok) {
     throw new Error(`Failed to load gll.wasm (HTTP ${response.status})`);
   }
   const contentType = response.headers.get("content-type");
+  const totalBytes = Number(response.headers.get("content-length"));
+  const encoding = response.headers.get("content-encoding");
+  if (
+    response.body &&
+    Number.isSafeInteger(totalBytes) &&
+    totalBytes > 0 &&
+    (!encoding || encoding === "identity")
+  ) {
+    let receivedBytes = 0;
+    let percent = 0;
+    onDownloadProgress(percent);
+    const progress = new TransformStream({
+      transform(chunk, controller) {
+        receivedBytes += chunk.byteLength;
+        const nextPercent = Math.min(
+          100,
+          Math.floor((receivedBytes / totalBytes) * 100),
+        );
+        if (nextPercent !== percent) {
+          percent = nextPercent;
+          onDownloadProgress(percent);
+        }
+        controller.enqueue(chunk);
+      },
+    });
+    response = new Response(response.body.pipeThrough(progress), {
+      headers: response.headers,
+    });
+  }
   const result =
     contentType === "application/wasm"
       ? await WebAssembly.instantiateStreaming(response, go.importObject)
@@ -236,13 +265,13 @@ function initTheme() {
     });
 }
 
-export async function initViewer() {
+export async function initViewer(onDownloadProgress) {
   initTheme();
   initDOMElements();
   if (typeof Chart !== "function") {
     throw new Error("Chart.js did not load");
   }
-  await initWasm();
+  await initWasm(onDownloadProgress);
   setupEventListeners();
   restoreCardStates();
 }
