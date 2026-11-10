@@ -70,7 +70,14 @@
 
       <div id="startup" class="loading" role="status">
         <div class="spinner" aria-hidden="true"></div>
+        <progress
+          class="hidden"
+          max="100"
+          value="0"
+          aria-label="Загрузка библиотеки GLL"
+        ></progress>
         <p>Загружаем просмотрщик GLL…</p>
+        <span class="hidden" aria-hidden="true"></span>
       </div>
 
       <div id="drop-zone" class="drop-zone hidden">
@@ -534,16 +541,30 @@
     </script>
     <script type="module">
       const startup = document.getElementById("startup");
+      const spinner = startup.querySelector(".spinner");
+      const progress = startup.querySelector("progress");
+      const message = startup.querySelector("p");
+      const percentage = startup.querySelector("span");
 
       try {
         const { initViewer } = await import("./app.js?release=dev");
-        await initViewer();
+        await initViewer((percent) => {
+          const downloaded = percent === 100;
+          spinner.classList.toggle("hidden", !downloaded);
+          progress.classList.toggle("hidden", downloaded);
+          percentage.classList.toggle("hidden", downloaded);
+          progress.value = percent;
+          percentage.textContent = `${percent}%`;
+          if (downloaded) message.textContent = "Запускаем просмотрщик GLL…";
+        });
         startup.classList.add("hidden");
         document.getElementById("drop-zone").classList.remove("hidden");
       } catch (error) {
         console.error("Could not start the GLL viewer", error);
-        startup.querySelector(".spinner").classList.add("hidden");
-        startup.querySelector("p").textContent =
+        spinner.classList.add("hidden");
+        progress.classList.add("hidden");
+        percentage.classList.add("hidden");
+        message.textContent =
           "Не удалось загрузить просмотрщик GLL. Обновите страницу и попробуйте снова.";
       }
     </script>

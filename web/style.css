@@ -171,6 +171,11 @@ header h1 {
   padding: 3rem;
 }
 
+#startup progress {
+  width: min(100%, 15rem);
+  accent-color: var(--primary);
+}
+
 .spinner {
   width: 40px;
   height: 40px;
