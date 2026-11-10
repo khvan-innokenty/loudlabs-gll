@@ -1,6 +1,20 @@
 const path = require("path");
 const { test, expect } = require("@playwright/test");
 
+test("initializes WebAssembly when the host omits its MIME type", async ({
+  page,
+}) => {
+  await page.route("**/gll.wasm", async (route) => {
+    const response = await route.fetch();
+    const headers = { ...response.headers() };
+    delete headers["content-type"];
+    await route.fulfill({ response, headers });
+  });
+
+  await page.goto("/web/");
+  await page.waitForFunction(() => typeof window.parseGLL === "function");
+});
+
 // Minimal fake parsed GLL data: one box type referencing one source definition.
 // The actual file bytes (example-cl.gll) are still loaded so currentFileBytes is
 // set, but parseGLL is overridden so the test never depends on the file's contents.

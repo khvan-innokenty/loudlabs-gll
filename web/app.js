@@ -107,10 +107,15 @@ const geometry = createGeometryController({
 // Initialize WASM
 async function initWasm() {
   const go = new Go();
-  const result = await WebAssembly.instantiateStreaming(
-    fetch("gll.wasm"),
-    go.importObject,
-  );
+  const response = await fetch("gll.wasm");
+  if (!response.ok) {
+    throw new Error(`Failed to load gll.wasm (HTTP ${response.status})`);
+  }
+  const contentType = response.headers.get("content-type");
+  const result =
+    contentType === "application/wasm"
+      ? await WebAssembly.instantiateStreaming(response, go.importObject)
+      : await WebAssembly.instantiate(await response.arrayBuffer(), go.importObject);
   go.run(result.instance);
   wasmReady = true;
 }
