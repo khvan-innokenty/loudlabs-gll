@@ -1,0 +1,107 @@
+name: Loudlabs Viewer
+
+on:
+  pull_request:
+    branches: [loudlabs]
+  push:
+    branches: [loudlabs]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload the verified build to production
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/loudlabs'
+    name: Build and smoke-test viewer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build viewer
+        run: |
+          GOOS=js GOARCH=wasm go build -buildvcs=false -o web/gll.wasm ./cmd/gllwasm
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:web
+      - name: Package verified web files
+        run: |
+          mkdir -p dist/viewer
+          rsync -r --exclude='*.spec.js' web/ dist/viewer/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gll-viewer
+          path: dist/viewer/
+          if-no-files-found: error
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/loudlabs' && inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: production
+      url: ${{ vars.DEPLOY_URL }}
+    concurrency:
+      group: gll-viewer-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gll-viewer
+          path: viewer
+      - name: Upload verified files over SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Set DEPLOY_HOST}" "${DEPLOY_USER:?Set DEPLOY_USER}"
+          : "${DEPLOY_PATH:?Set DEPLOY_PATH}" "${DEPLOY_URL:?Set DEPLOY_URL}"
+          : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY}" "${DEPLOY_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS}"
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_-]*$ ]]
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]
+          [[ "$DEPLOY_PATH" =~ ^/?([a-zA-Z0-9_-][a-zA-Z0-9._-]*/)*[a-zA-Z0-9_-][a-zA-Z0-9._-]*$ ]]
+          [[ "$DEPLOY_URL" == https://* ]]
+          test -s viewer/index.html
+          test -s viewer/gll.wasm
+
+          umask 077
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh_options=(-p "$DEPLOY_PORT" -i "$ssh_dir/key" -o BatchMode=yes
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=15)
+          destination="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh "${ssh_options[@]}" "$destination" "test -d '$DEPLOY_PATH' && test -w '$DEPLOY_PATH'"
+          rsync -rt --delay-updates --secluded-args \
+            -e "ssh ${ssh_options[*]}" viewer/ "$destination:$DEPLOY_PATH/"
+
+          for file in index.html gll.wasm; do
+            curl --fail --silent --show-error --max-time 30 \
+              "${DEPLOY_URL%/}/$file?release=$GITHUB_SHA" -o "$RUNNER_TEMP/$file"
+            cmp "viewer/$file" "$RUNNER_TEMP/$file"
+          done
