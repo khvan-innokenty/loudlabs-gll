@@ -1,6 +1,32 @@
 const path = require("path");
 const { test, expect } = require("@playwright/test");
 
+test("shows startup progress until the file chooser is ready", async ({ page }) => {
+  let releaseWasm;
+  const wasmCanLoad = new Promise((resolve) => {
+    releaseWasm = resolve;
+  });
+  await page.route("**/gll.wasm", async (route) => {
+    await wasmCanLoad;
+    await route.continue();
+  });
+
+  try {
+    const wasmRequest = page.waitForRequest("**/gll.wasm");
+    await page.goto("/web/", { waitUntil: "commit" });
+    await wasmRequest;
+    await expect(page.locator("#startup")).toBeVisible();
+    await expect(page.locator("#drop-zone")).toBeHidden();
+  } finally {
+    releaseWasm();
+  }
+
+  await expect(page.locator("#startup")).toBeHidden();
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator("#drop-zone").click();
+  await chooser;
+});
+
 test("initializes WebAssembly when the host omits its MIME type", async ({
   page,
 }) => {

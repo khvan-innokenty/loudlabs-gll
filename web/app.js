@@ -74,7 +74,7 @@ const THEME_KEY = "gll-viewer-theme";
 const THEME_MODES = ["auto", "light", "dark"];
 let currentThemeMode = "auto";
 
-// DOM Elements (initialized in DOMContentLoaded)
+// DOM Elements (initialized when the viewer starts)
 let dropZone = null;
 let fileInput = null;
 let loading = null;
@@ -236,15 +236,16 @@ function initTheme() {
     });
 }
 
-// Initialize
-document.addEventListener("DOMContentLoaded", async () => {
-  // Boot sequence: theme, DOM, WASM, then UI bindings
+export async function initViewer() {
   initTheme();
   initDOMElements();
+  if (typeof Chart !== "function") {
+    throw new Error("Chart.js did not load");
+  }
   await initWasm();
   setupEventListeners();
   restoreCardStates();
-});
+}
 
 // Register UI event handlers for controls and visualizations
 function setupEventListeners() {
