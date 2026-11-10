@@ -36,6 +36,7 @@ jobs:
         run: |
           GOOS=js GOARCH=wasm go build -buildvcs=false -o web/gll.wasm ./cmd/gllwasm
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
+          sed -i "s/?release=dev/?release=$GITHUB_SHA/g" web/index.html
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:web
@@ -100,7 +101,7 @@ jobs:
           rsync -rt --delay-updates --secluded-args \
             -e "ssh ${ssh_options[*]}" viewer/ "$destination:$DEPLOY_PATH/"
 
-          for file in index.html gll.wasm; do
+          for file in index.html gll.wasm wasm_exec.js app.js; do
             curl --fail --silent --show-error --max-time 30 \
               "${DEPLOY_URL%/}/$file?release=$GITHUB_SHA" -o "$RUNNER_TEMP/$file"
             cmp "viewer/$file" "$RUNNER_TEMP/$file"

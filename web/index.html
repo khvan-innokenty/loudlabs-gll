@@ -12,6 +12,7 @@
     <link rel="icon" type="image/png" href="icon-256.png" sizes="256x256" />
     <link rel="icon" type="image/png" href="icon-32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="icon-16.png" sizes="16x16" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" sizes="any" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -521,7 +522,7 @@
       </footer>
     </div>
 
-    <script src="wasm_exec.js"></script>
+    <script src="wasm_exec.js?release=dev"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script type="importmap">
@@ -535,7 +536,7 @@
       const startup = document.getElementById("startup");
 
       try {
-        const { initViewer } = await import("./app.js");
+        const { initViewer } = await import("./app.js?release=dev");
         await initViewer();
         startup.classList.add("hidden");
         document.getElementById("drop-zone").classList.remove("hidden");
