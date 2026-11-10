@@ -19,7 +19,7 @@ jobs:
   build:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/loudlabs'
     name: Build and smoke-test viewer
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
